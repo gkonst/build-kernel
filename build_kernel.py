@@ -7,46 +7,44 @@ from shutil import copyfile
 from optparse import OptionParser
 import _emerge
 
-src_linux_path = "/usr/src/linux"
-kernel_dir = os.path.basename(os.path.realpath(src_linux_path))
-kernel_version = kernel_dir
-#kernel_version = "Gentoo Linux"
-grub_conf_path = "/boot/grub/grub.conf"
-#grub_conf_path = "/home/kostya/grub.conf"
-config_path = "/home/kostya/scripts/kernel/.config"
+SRC_LINUX_PATH = "/usr/src/linux"
+KERNEL_DIR = os.path.basename(os.path.realpath(SRC_LINUX_PATH))
+KERNEL_VERSION = KERNEL_DIR
+GRUB_CONF_PATH = "/boot/grub/grub.conf"
+CONFIG_PATH = "/home/kostya/scripts/kernel/.config"
 remerge_packages = ["ati-drivers", "app-emulation/vmware-modules"]
-external_tools = []
 external_tools = [["vmware-config.pl", "-d"]]
-max_kernels = 5
+MAX_KERNELS = 5
 
 def main() :
     if os.geteuid() != 0:
         print "You must be root to run this script."
         sys.exit(1)    
     parser = OptionParser()
-    parser.add_option("-c", "--config", dest="config_path", default="/home/kostya/scripts/kernel/.config", help="Path to .config file", metavar="FILE")
+    parser.add_option("-c", "--config", dest="config_path", default=CONFIG_PATH, help="Path to .config file", metavar="FILE")
     (options, args) = parser.parse_args()  
     config_path = os.path.abspath(options.config_path)
     if not os.path.isfile(config_path):
         print "ERROR: wrong .config file : ", config_path
         sys.exit()
     print "using config from : ", config_path
-    print "compiling kernel...", kernel_version
-    if os.path.realpath(config_path) != os.path.realpath(os.path.join(src_linux_path, ".config")):
-        copyfile(config_path, os.path.join(src_linux_path, ".config"))
-    os.chdir(src_linux_path)
+    print "compiling kernel...", KERNEL_VERSION
+    if os.path.realpath(config_path) != os.path.realpath(os.path.join(SRC_LINUX_PATH, ".config")):
+        copyfile(config_path, os.path.join(SRC_LINUX_PATH, ".config"))
+    os.chdir(SRC_LINUX_PATH)
     subprocess.call(["make"])
     subprocess.call(["make", "modules_install"])
     print "compiling kernel...Ok"
     print "installing kernel..."
     _copy_kernel()
-    grub_conf = _load_grub_conf()
+    grub_conf = _load_grub_conf(GRUB_CONF_PATH)
     #print grub_conf
     if not _is_in_grub_conf(grub_conf):
         print " kernel not found in grub.conf -> adding"
-        _add_to_grub_conf(grub_conf)
-        _save_grub_conf(grub_conf)
+        _add_to_grub_conf(grub_conf, KERNEL_VERSION)
+        removed_kernels = _save_grub_conf(grub_conf, GRUB_CONF_PATH)
         _update_grub()
+        _remove_old_kernels(removed_kernels)
     else:
         print " kernel found in grub.conf"
     print "installing kernel...Ok"
@@ -55,16 +53,17 @@ def main() :
 
 def _copy_kernel():
     _remount_boot_for_write()
-    copyfile(os.path.join(src_linux_path, "arch/i386/boot/bzImage"), "/boot/kernel-%s" % kernel_version)
-    copyfile(os.path.join(src_linux_path, "System.map"), "/boot/System.map-%s" % kernel_version)
+    copyfile(os.path.join(SRC_LINUX_PATH, "arch/i386/boot/bzImage"), "/boot/kernel-%s" % KERNEL_VERSION)
+    copyfile(os.path.join(SRC_LINUX_PATH, "System.map"), "/boot/System.map-%s" % KERNEL_VERSION)
     _remount_boot_for_read()
 
 def _is_in_grub_conf(grub_conf):
     for boot in grub_conf["boot"]:
-        if len(filter(lambda line: "title=" in line and line.partition("=")[2].strip() == kernel_version, boot)):
+        if len(filter(lambda line: "title=" in line and line.partition("=")[2].strip() == KERNEL_VERSION, boot)):
             return True
     
-def _load_grub_conf():
+def _load_grub_conf(grub_conf_path):
+    print "loading grub.conf... ", grub_conf_path
     fin = open(grub_conf_path, "rt")
     content = fin.read()
     boot = None
@@ -83,9 +82,10 @@ def _load_grub_conf():
             params.append(line)   
     result = { "params" : params, "boot" : boots}
     fin.close()
+    print "loading grub.conf...Ok (%s kernels found)" % len(result["boot"])
     return result
 
-def _save_grub_conf(grub_conf):
+def _save_grub_conf(grub_conf, GRUB_CONF_PATH):
     print " saving grub.conf..."
     _remount_boot_for_write()
     print "  backuping grub.conf..."
@@ -110,11 +110,39 @@ def _update_grub():
     _remount_boot_for_read()
     print "updating grub...Ok"    
 
-def _add_to_grub_conf(grub_conf):
+def _add_to_grub_conf(grub_conf, kernel_version):
+    print "adding to grub.conf kernel...", kernel_version
     grub_conf["boot"].insert(0, ["title=%s" % kernel_version,  "root (hd1,0)", "kernel /boot/kernel-%s root=/dev/sdb3" % kernel_version])
-    while len(grub_conf["boot"]) > max_kernels:
+    removed_kernels = []
+    while len(grub_conf["boot"]) > MAX_KERNELS:
         removed_kernel = grub_conf["boot"].pop()
         print "   removing old kernel from list : ", removed_kernel
+        removed_kernels.append(removed_kernel)
+    print "adding to grub.conf kernel...Ok (%s old kernel removed)" % len(removed_kernels)
+    return removed_kernels
+
+def _remove_old_kernels(removed_kernels):
+    print "removing old kernels from disk..."
+    for kernel in removed_kernels:
+        kernel_version = None
+        for line in kernel:
+            if line.startswith("title"):
+                kernel_version = line.partition("=")[2]
+                print " kernel version : ", kernel_version
+            if line.startswith("kernel") and kernel_version:               
+                image = line.split(" ")[1]
+                print " deleting kernel image : ", image
+                temp = image.rpartition(os.sep)[2].rpartition("kernel-")
+                if temp[1]:
+                    system_map = "/boot/System.map-%s" % temp[2]
+                else:
+                    system_map = "/boot/System.map"
+                print " deleting kernel map : ", system_map
+                _remount_boot_for_write()
+                os.remove(image)
+                os.remove(system_map)
+                _remount_boot_for_read()
+    print "removing old kernels from disk...Ok"
         
 def _remerge_packages():
     print "emerging needed packages...", remerge_packages
