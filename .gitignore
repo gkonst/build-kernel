@@ -1,0 +1,8 @@
+.externalToolBuilders
+.project
+.pydevproject
+_eric4project
+*.e4p
+*.pyc
+dist
+MANIFEST*
