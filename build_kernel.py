@@ -11,10 +11,16 @@ SRC_LINUX_PATH = "/usr/src/linux"
 KERNEL_DIR = os.path.basename(os.path.realpath(SRC_LINUX_PATH))
 KERNEL_VERSION = KERNEL_DIR
 GRUB_CONF_PATH = "/boot/grub/grub.conf"
-CONFIG_PATH = "/home/kostya/scripts/kernel/.config"
-remerge_packages = ["ati-drivers", "app-emulation/vmware-modules"]
-external_tools = [["vmware-config.pl", "-d"]]
-MAX_KERNELS = 5
+MBR_HDD = "/dev/sda"
+ROOT_PARTITION="/dev/sda8"
+BOOT_PARTITION = "/dev/sda6"
+BOOT_PARTITION_GRUB = 'hd0,5'
+BOOT_PARAMS = ''
+CONFIG_PATH = "/home/konstantin_grigoriev/scripts/kernel/.config"
+remerge_packages = ["app-emulation/virtualbox-modules" ]
+external_tools = []
+MAX_KERNELS = 7
+TEST_RUN = False
 
 def main() :
     if os.geteuid() != 0:
@@ -30,6 +36,8 @@ def main() :
     print "using config from : ", config_path
     print "compiling kernel...", KERNEL_VERSION
     if os.path.realpath(config_path) != os.path.realpath(os.path.join(SRC_LINUX_PATH, ".config")):
+        if os.path.exists(os.path.join(SRC_LINUX_PATH, ".config")):
+            copyfile(os.path.join(SRC_LINUX_PATH, ".config"), os.path.join(SRC_LINUX_PATH, ".config.bak"))
         copyfile(config_path, os.path.join(SRC_LINUX_PATH, ".config"))
     os.chdir(SRC_LINUX_PATH)
     subprocess.call(["make"])
@@ -41,8 +49,8 @@ def main() :
     #print grub_conf
     if not _is_in_grub_conf(grub_conf):
         print " kernel not found in grub.conf -> adding"
-        _add_to_grub_conf(grub_conf, KERNEL_VERSION)
-        removed_kernels = _save_grub_conf(grub_conf, GRUB_CONF_PATH)
+        removed_kernels = _add_to_grub_conf(grub_conf, KERNEL_VERSION)
+        _save_grub_conf(grub_conf, GRUB_CONF_PATH)
         _update_grub()
         _remove_old_kernels(removed_kernels)
     else:
@@ -73,7 +81,7 @@ def _load_grub_conf(grub_conf_path):
         #print "line : ", line
         if "title=" in line:
             #title = line.partition("=")[2].strip()
-            #print title 
+            #print 'title :', title 
             boot = [line]
             boots.append(boot)
         elif boot:
@@ -85,7 +93,7 @@ def _load_grub_conf(grub_conf_path):
     print "loading grub.conf...Ok (%s kernels found)" % len(result["boot"])
     return result
 
-def _save_grub_conf(grub_conf, GRUB_CONF_PATH):
+def _save_grub_conf(grub_conf, grub_conf_path):
     print " saving grub.conf..."
     _remount_boot_for_write()
     print "  backuping grub.conf..."
@@ -96,6 +104,7 @@ def _save_grub_conf(grub_conf, GRUB_CONF_PATH):
         fout.write(param + "\n\n")
     fout.write("\n")
     for conf in grub_conf["boot"]:
+	#print 'conf :', conf
         for line in conf:
             fout.write(line + "\n")
         fout.write("\n")
@@ -105,19 +114,39 @@ def _save_grub_conf(grub_conf, GRUB_CONF_PATH):
 
 def _update_grub():
     print "updating grub..."
-    _remount_boot_for_write()
-    subprocess.call(["grub-install", "--no-floppy", "/dev/sda"])
-    _remount_boot_for_read()
+    if not TEST_RUN:
+        _remount_boot_for_write()
+        subprocess.call(["grub-install", "--no-floppy", MBR_HDD])
+        _remount_boot_for_read()
     print "updating grub...Ok"    
 
 def _add_to_grub_conf(grub_conf, kernel_version):
     print "adding to grub.conf kernel...", kernel_version
-    grub_conf["boot"].insert(0, ["title=%s" % kernel_version,  "root (hd1,0)", "kernel /boot/kernel-%s root=/dev/sdb3" % kernel_version])
+    grub_conf["boot"].insert(0, ["title=%s" % kernel_version,  "root (%s)" % BOOT_PARTITION_GRUB, "kernel /boot/kernel-%s root=%s %s" % (kernel_version, ROOT_PARTITION, BOOT_PARAMS)])
     removed_kernels = []
-    while len(grub_conf["boot"]) > MAX_KERNELS:
-        removed_kernel = grub_conf["boot"].pop()
-        print "   removing old kernel from list : ", removed_kernel
-        removed_kernels.append(removed_kernel)
+    gentoo_boots = grub_conf
+#    i = len(gentoo_boots["boot"]) - 1;
+#    while len(gentoo_boots["boot"]) > MAX_KERNELS and i >= 0:
+#        removed_kernel = gentoo_boots["boot"][i]
+#        if "gentoo" in removed_kernel[0].lower():
+#            print "   removing old kernel from list : ", removed_kernel
+#            removed_kernels.append(removed_kernel)
+#        i = i - 1
+    
+    gentoo_count = 0 
+    j = len(grub_conf["boot"])
+    i = 0   
+    while(i < j):
+        removed_kernel = grub_conf["boot"][i]
+        if "gentoo" in removed_kernel[0].lower():
+            gentoo_count = gentoo_count + 1
+            if gentoo_count > MAX_KERNELS:
+                print "   removing old kernel from list : ", removed_kernel
+                del grub_conf["boot"][i]
+                j = j -1
+                i = i -1
+                removed_kernels.append(removed_kernel)
+        i = i +1              
     print "adding to grub.conf kernel...Ok (%s old kernel removed)" % len(removed_kernels)
     return removed_kernels
 
@@ -138,18 +167,21 @@ def _remove_old_kernels(removed_kernels):
                 else:
                     system_map = "/boot/System.map"
                 print " deleting kernel map : ", system_map
-                _remount_boot_for_write()
-                os.remove(image)
-                os.remove(system_map)
-                _remount_boot_for_read()
+                if not TEST_RUN:
+                    _remount_boot_for_write()
+                    if os.path.exists(image):
+                        os.remove(image)
+                    if os.path.exists(system_map):
+                        os.remove(system_map)
+                    _remount_boot_for_read()
     print "removing old kernels from disk...Ok"
         
 def _remerge_packages():
     print "emerging needed packages...", remerge_packages
-    del sys.argv[:]
-    sys.argv.append("-v1")
-    sys.argv.extend(remerge_packages)
-    _emerge.emerge_main()
+    packages = ["/usr/bin/emerge", "-v1"];
+    packages.extend(remerge_packages)
+    print " running : ", packages
+    subprocess.call(packages)
     print "emerging needed packages...Ok"
     
 def _run_external_tools():
@@ -159,12 +191,14 @@ def _run_external_tools():
     print "running needed external tools...Ok"
     
 def _remount_boot_for_write():
-    subprocess.call(["umount", "/boot"])
-    subprocess.call(["mount", "/dev/sdb1", "/boot"])
+    if not TEST_RUN:
+        subprocess.call(["umount", "/boot"])
+        subprocess.call(["mount", BOOT_PARTITION, "/boot"])
     
 def _remount_boot_for_read():
-    subprocess.call(["umount", "/boot"])
-    subprocess.call(["mount", "/boot"])  
+    if not TEST_RUN:
+        subprocess.call(["umount", "/boot"])
+        subprocess.call(["mount", "/boot"])  
 
 if __name__ == '__main__':
     main()          
