@@ -6,3 +6,5 @@ _eric4project
 *.pyc
 dist
 MANIFEST*
+build
+build_kernel.egg-info

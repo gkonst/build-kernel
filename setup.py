@@ -11,7 +11,7 @@ setup(
     author_email = "Konstantin.V.Grigoriev@gmail.com",
     url = "http://github.com/KonstantinGrigoriev/build-kernel",
     license = "GPLv3",
-    py_modules = "build_kernel"
+    py_modules = ["build_kernel",],
     entry_points = """
         [console_scripts]
             build_kernel = build_kernel:main
