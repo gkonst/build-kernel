@@ -11,7 +11,7 @@ import build_kernel
 TEST_CONF = os.path.join(os.path.dirname(__file__), 'test', 'build_kernel.conf.test')
 TEST_VERSION = 'test-kernel'
 TEST_GENTOO_VERSION = 'gentoo-kernel'
-#TEST_TEMP = os.path.join('test', 'boot')
+
 KERNELS_IN_GRUB = 5
 
 class Test(unittest.TestCase):
@@ -19,8 +19,6 @@ class Test(unittest.TestCase):
     def setUp(self):
         sys.path.insert(0, os.path.dirname(__file__))
         build_kernel.conf = build_kernel.load_conf(TEST_CONF)
-#        if not os.path.exists(TEST_TEMP):
-#            os.mkdir(TEST_TEMP)
 
     def test_load_config(self):
         conf = build_kernel.conf
@@ -34,6 +32,10 @@ class Test(unittest.TestCase):
 
     def test_install_kernel(self):
         build_kernel.install_kernel(TEST_VERSION)
+        self.assertTrue(os.path.exists(build_kernel.get_kernel_path(TEST_VERSION)))
+        self.assertTrue(os.path.exists(build_kernel.get_system__map_path(build_kernel.get_kernel_path(TEST_VERSION))))
+        os.remove(build_kernel.get_kernel_path(TEST_VERSION))
+        os.remove(build_kernel.get_system__map_path(build_kernel.get_kernel_path(TEST_VERSION)))
 
     def test_load_grub_conf(self):
         grub_conf = build_kernel.load_grub_conf()
@@ -71,6 +73,7 @@ class Test(unittest.TestCase):
         build_kernel.restore_file(build_kernel.conf.get('main', 'grub_conf'))
         new_grub_conf = build_kernel.load_grub_conf()
         self.assertEqual(len(new_grub_conf['boot']), KERNELS_IN_GRUB)
+        os.remove(build_kernel.conf.get('main', 'grub_conf') + '~')
 
     def test_remove_old_kernels(self):
         grub_conf = build_kernel.load_grub_conf()
@@ -122,6 +125,8 @@ class Test(unittest.TestCase):
             self.assertFalse(os.path.exists(image))
             self.assertFalse(os.path.exists(system_map))
         build_kernel.backup_file(build_kernel.conf.get('main', 'grub_conf'),'~~')
+        build_kernel.backup_file(build_kernel.get_kernel_path(None))
+        build_kernel.backup_file(build_kernel.get_system__map_path(build_kernel.get_kernel_path(None)))
         _test()
         # hack kernel version
         version = get_unique_version(TEST_GENTOO_VERSION)
@@ -131,6 +136,10 @@ class Test(unittest.TestCase):
         build_kernel.get_kernel_version = lambda: version
         _test()
         build_kernel.restore_file(build_kernel.conf.get('main', 'grub_conf'),'~~')
+        build_kernel.restore_file(build_kernel.get_kernel_path(None))
+        build_kernel.restore_file(build_kernel.get_system__map_path(build_kernel.get_kernel_path(None)))
+        os.remove(build_kernel.get_kernel_path(None) + '~')
+        os.remove(build_kernel.get_system__map_path(build_kernel.get_kernel_path(None)) + '~')
         os.remove(build_kernel.conf.get('main', 'grub_conf') + '~~')
         os.remove(build_kernel.conf.get('main', 'grub_conf') + '~')
 
@@ -142,6 +151,6 @@ def get_unique_version(version):
     return version + str(random.random())
 
 if __name__ == "__main__":
-#    sys.argv = ['', 'Test.test_run_external_tool']
+#    sys.argv = ['', 'Test.test_main']
 #    sys.argv.append('Test.test_load_config')
     unittest.main()

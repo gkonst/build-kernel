@@ -51,7 +51,10 @@ def get_kernel_version():
     return os.path.basename(os.path.realpath(conf.get('main', 'src_linux')))
 
 def get_kernel_path(kernel_version):
-    return os.path.join(conf.get('main', 'boot_path'), 'kernel-%s' % kernel_version)
+    if kernel_version:
+        return os.path.join(conf.get('main', 'boot_path'), 'kernel-%s' % kernel_version)
+    else:
+        return os.path.join(conf.get('main', 'boot_path'), 'kernel')
 
 def get_system__map_path(image):
     temp = image.rpartition(os.sep)[2].rpartition("kernel-")
