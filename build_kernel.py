@@ -19,7 +19,7 @@ def load_conf(conf_path=DEFAULT_CONF):
 def main() :
     check_user()
     parser = OptionParser()
-    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF, help="Path to build_kernel.conf file", metavar="FILE")
+    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF, help="Path to build_kernel.conf file (default:%s)" % DEFAULT_CONF, metavar="FILE")
     parser.add_option("-C", "--config", dest="linux_config_path", default=None, help="Path to .config file", metavar="FILE")
     (options, args) = parser.parse_args()
     conf_path = os.path.abspath(options.conf_path)
