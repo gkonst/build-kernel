@@ -5,74 +5,99 @@ from itertools import ifilter
 import subprocess
 from shutil import copyfile
 from optparse import OptionParser
-import _emerge
+from ConfigParser import RawConfigParser
 
-SRC_LINUX_PATH = "/usr/src/linux"
-KERNEL_DIR = os.path.basename(os.path.realpath(SRC_LINUX_PATH))
-KERNEL_VERSION = KERNEL_DIR
-GRUB_CONF_PATH = "/boot/grub/grub.conf"
-MBR_HDD = "/dev/sda"
-ROOT_PARTITION="/dev/sda8"
-BOOT_PARTITION = "/dev/sda6"
-BOOT_PARTITION_GRUB = 'hd0,5'
-BOOT_PARAMS = ''
-CONFIG_PATH = "/home/konstantin_grigoriev/scripts/kernel/.config"
-remerge_packages = ["app-emulation/virtualbox-modules" ]
-external_tools = []
-MAX_KERNELS = 7
-TEST_RUN = False
+DEFAULT_CONF="/etc/build_kernel.conf"
+
+conf = None
+
+def load_conf(conf_path=DEFAULT_CONF):
+    conf = RawConfigParser()
+    conf.read(conf_path)
+    return conf
 
 def main() :
-    if os.geteuid() != 0:
-        print "You must be root to run this script."
-        sys.exit(1)    
+    check_user()
     parser = OptionParser()
-    parser.add_option("-c", "--config", dest="config_path", default=CONFIG_PATH, help="Path to .config file", metavar="FILE")
-    (options, args) = parser.parse_args()  
-    config_path = os.path.abspath(options.config_path)
-    if not os.path.isfile(config_path):
-        print "ERROR: wrong .config file : ", config_path
+    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF, help="Path to build_kernel.conf file", metavar="FILE")
+    parser.add_option("-C", "--config", dest="linux_config_path", default=None, help="Path to .config file", metavar="FILE")
+    (options, args) = parser.parse_args()
+    conf_path = os.path.abspath(options.conf_path)
+    if not os.path.isfile(conf_path):
+        print "ERROR: wrong build_kernel.conf file : ", conf_path
         sys.exit()
-    print "using config from : ", config_path
-    print "compiling kernel...", KERNEL_VERSION
-    if os.path.realpath(config_path) != os.path.realpath(os.path.join(SRC_LINUX_PATH, ".config")):
-        if os.path.exists(os.path.join(SRC_LINUX_PATH, ".config")):
-            copyfile(os.path.join(SRC_LINUX_PATH, ".config"), os.path.join(SRC_LINUX_PATH, ".config.bak"))
-        copyfile(config_path, os.path.join(SRC_LINUX_PATH, ".config"))
-    os.chdir(SRC_LINUX_PATH)
-    subprocess.call(["make"])
-    subprocess.call(["make", "modules_install"])
-    print "compiling kernel...Ok"
-    print "installing kernel..."
-    _copy_kernel()
-    grub_conf = _load_grub_conf(GRUB_CONF_PATH)
+    print "using conf from : ", conf_path
+    load_conf(conf_path)
+    compile_kernel(options.linux_config_path)
+    install_kernel(get_kernel_version())
+    grub_conf = load_grub_conf()
     #print grub_conf
-    if not _is_in_grub_conf(grub_conf):
+    if not is_in_grub_conf(grub_conf, get_kernel_version()):
         print " kernel not found in grub.conf -> adding"
-        removed_kernels = _add_to_grub_conf(grub_conf, KERNEL_VERSION)
-        _save_grub_conf(grub_conf, GRUB_CONF_PATH)
+        removed_kernels = add_to_grub_conf(grub_conf, get_kernel_version())
+        save_grub_conf(grub_conf, conf)
         _update_grub()
-        _remove_old_kernels(removed_kernels)
+        remove_old_kernels(prepare_remove_kernels(removed_kernels))
     else:
         print " kernel found in grub.conf"
-    print "installing kernel...Ok"
-    _remerge_packages()
-    _run_external_tools()
+    run_external_tool()
 
-def _copy_kernel():
+def check_user():
+    if os.geteuid() != 0:
+        print "You must be root to run this script."
+        sys.exit(1)
+
+def get_kernel_version():
+    return os.path.basename(os.path.realpath(conf.get('main', 'src_linux')))
+
+def get_kernel_path(kernel_version):
+    return os.path.join(conf.get('main', 'boot_path'), 'kernel-%s' % kernel_version)
+
+def get_system__map_path(image):
+    temp = image.rpartition(os.sep)[2].rpartition("kernel-")
+    if temp[1]:
+        system_map = os.path.join(conf.get('main', 'boot_path'), 'System.map-%s' % temp[2])
+    else:
+        system_map = os.path.join(conf.get('main', 'boot_path'), 'System.map')
+    return system_map
+
+def backup_file(path, symbol='~'):
+    if os.path.exists(path):
+        copyfile(path, path + symbol)
+
+def restore_file(path, symbol='~'):
+    backup = path + symbol
+    if os.path.exists(backup):
+        copyfile(backup, path)
+
+def compile_kernel(linux_config_path=None):
+    print "compiling kernel...", get_kernel_version()
+    if linux_config_path:
+        linux_config = os.path.join(conf.get('main', 'src_linux'), '.config')
+        backup_file(linux_config)
+        copyfile(linux_config_path, linux_config)
+#    os.chdir(conf.get('main', 'src_linux'))
+    subprocess.call(["make",], cwd=conf.get('main', 'src_linux'))
+    subprocess.call(["make", "modules_install"], cwd=conf.get('main', 'src_linux'))
+    print "compiling kernel...Ok"
+
+def install_kernel(kernel_version):
+    print "installing kernel...", kernel_version
     _remount_boot_for_write()
-    copyfile(os.path.join(SRC_LINUX_PATH, "arch/i386/boot/bzImage"), "/boot/kernel-%s" % KERNEL_VERSION)
-    copyfile(os.path.join(SRC_LINUX_PATH, "System.map"), "/boot/System.map-%s" % KERNEL_VERSION)
+    copyfile(os.path.join(conf.get('main', 'src_linux'), "arch/i386/boot/bzImage"), get_kernel_path(kernel_version))
+    copyfile(os.path.join(conf.get('main', 'src_linux'), "System.map"), os.path.join(conf.get('main', 'boot_path'), 'System.map-%s' % kernel_version))
     _remount_boot_for_read()
+    print "installing kernel...Ok"
 
-def _is_in_grub_conf(grub_conf):
+def is_in_grub_conf(grub_conf, kernel_version):
+    print ' checking for kernel...', kernel_version
     for boot in grub_conf["boot"]:
-        if len(filter(lambda line: "title=" in line and line.partition("=")[2].strip() == KERNEL_VERSION, boot)):
+        if len(filter(lambda line: "title=" in line and line.partition("=")[2].strip() == kernel_version, boot)):
             return True
-    
-def _load_grub_conf(grub_conf_path):
-    print "loading grub.conf... ", grub_conf_path
-    fin = open(grub_conf_path, "rt")
+
+def load_grub_conf():
+    print "loading grub.conf... ", conf.get('main', 'grub_conf')
+    fin = open(conf.get('main', 'grub_conf'), "rt")
     content = fin.read()
     boot = None
     boots = []
@@ -81,124 +106,111 @@ def _load_grub_conf(grub_conf_path):
         #print "line : ", line
         if "title=" in line:
             #title = line.partition("=")[2].strip()
-            #print 'title :', title 
+            #print 'title :', title
             boot = [line]
             boots.append(boot)
         elif boot:
             boot.append(line)
         else:
-            params.append(line)   
+            params.append(line)
     result = { "params" : params, "boot" : boots}
     fin.close()
     print "loading grub.conf...Ok (%s kernels found)" % len(result["boot"])
     return result
 
-def _save_grub_conf(grub_conf, grub_conf_path):
-    print " saving grub.conf..."
+def save_grub_conf(grub_conf,conf=conf):
+    print " saving grub.conf...", conf.get('main', 'grub_conf')
     _remount_boot_for_write()
     print "  backuping grub.conf..."
-    copyfile(grub_conf_path, grub_conf_path + "~")
+    backup_file(conf.get('main', 'grub_conf'))
     print "  backuping grub.conf...Ok"
-    fout = open(grub_conf_path, "wt")
+    fout = open(conf.get('main', 'grub_conf'), "wt")
     for param in grub_conf["params"]:
         fout.write(param + "\n\n")
     fout.write("\n")
     for conf in grub_conf["boot"]:
-	#print 'conf :', conf
+    #print 'conf :', conf
         for line in conf:
             fout.write(line + "\n")
         fout.write("\n")
     fout.close()
     _remount_boot_for_read()
-    print " saving grub.conf...Ok"    
+    print " saving grub.conf...Ok"
 
 def _update_grub():
     print "updating grub..."
-    if not TEST_RUN:
-        _remount_boot_for_write()
-        subprocess.call(["grub-install", "--no-floppy", MBR_HDD])
-        _remount_boot_for_read()
-    print "updating grub...Ok"    
+    _remount_boot_for_write()
+    subprocess.call(["grub-install", "--no-floppy", conf.get('main', 'mbr_hdd')])
+    _remount_boot_for_read()
+    print "updating grub...Ok"
 
-def _add_to_grub_conf(grub_conf, kernel_version):
+def add_to_grub_conf(grub_conf, kernel_version):
     print "adding to grub.conf kernel...", kernel_version
-    grub_conf["boot"].insert(0, ["title=%s" % kernel_version,  "root (%s)" % BOOT_PARTITION_GRUB, "kernel /boot/kernel-%s root=%s %s" % (kernel_version, ROOT_PARTITION, BOOT_PARAMS)])
+    kernel_string = 'kernel %s root=%s %s' % (get_kernel_path(kernel_version), conf.get('main', 'root_partition'), conf.get('main', 'boot_params'))
+    grub_conf["boot"].insert(0, ["title=%s" % kernel_version,  "root (%s)" % conf.get('main', 'boot_partition_grub'), kernel_string])
     removed_kernels = []
-    gentoo_boots = grub_conf
-#    i = len(gentoo_boots["boot"]) - 1;
-#    while len(gentoo_boots["boot"]) > MAX_KERNELS and i >= 0:
-#        removed_kernel = gentoo_boots["boot"][i]
-#        if "gentoo" in removed_kernel[0].lower():
-#            print "   removing old kernel from list : ", removed_kernel
-#            removed_kernels.append(removed_kernel)
-#        i = i - 1
-    
-    gentoo_count = 0 
+
+    gentoo_count = 0
     j = len(grub_conf["boot"])
-    i = 0   
+    i = 0
     while(i < j):
         removed_kernel = grub_conf["boot"][i]
         if "gentoo" in removed_kernel[0].lower():
             gentoo_count = gentoo_count + 1
-            if gentoo_count > MAX_KERNELS:
+            if gentoo_count > conf.getint('main', 'max_kernels'):
                 print "   removing old kernel from list : ", removed_kernel
                 del grub_conf["boot"][i]
                 j = j -1
                 i = i -1
                 removed_kernels.append(removed_kernel)
-        i = i +1              
+        else:
+            print '   skipping : ', removed_kernel
+        i = i +1
     print "adding to grub.conf kernel...Ok (%s old kernel removed)" % len(removed_kernels)
     return removed_kernels
 
-def _remove_old_kernels(removed_kernels):
-    print "removing old kernels from disk..."
+def prepare_remove_kernels(removed_kernels):
+    result = []
     for kernel in removed_kernels:
         kernel_version = None
         for line in kernel:
             if line.startswith("title"):
                 kernel_version = line.partition("=")[2]
-                print " kernel version : ", kernel_version
-            if line.startswith("kernel") and kernel_version:               
+            if line.startswith("kernel") and kernel_version:
                 image = line.split(" ")[1]
-                print " deleting kernel image : ", image
-                temp = image.rpartition(os.sep)[2].rpartition("kernel-")
-                if temp[1]:
-                    system_map = "/boot/System.map-%s" % temp[2]
-                else:
-                    system_map = "/boot/System.map"
-                print " deleting kernel map : ", system_map
-                if not TEST_RUN:
-                    _remount_boot_for_write()
-                    if os.path.exists(image):
-                        os.remove(image)
-                    if os.path.exists(system_map):
-                        os.remove(system_map)
-                    _remount_boot_for_read()
+                system_map = get_system__map_path(image)
+                result.append((image, system_map))
+    return result
+
+def remove_old_kernels(removed_kernels):
+    print "removing old kernels from disk..."
+    for kernel in removed_kernels:
+        image = kernel[0]
+        system_map = kernel[1]
+        _remount_boot_for_write()
+        if os.path.exists(image):
+            print " deleting kernel image : ", image
+            os.remove(image)
+        if os.path.exists(system_map):
+            print " deleting kernel map : ", system_map
+            os.remove(system_map)
+        _remount_boot_for_read()
     print "removing old kernels from disk...Ok"
-        
-def _remerge_packages():
-    print "emerging needed packages...", remerge_packages
-    packages = ["/usr/bin/emerge", "-v1"];
-    packages.extend(remerge_packages)
-    print " running : ", packages
-    subprocess.call(packages)
-    print "emerging needed packages...Ok"
-    
-def _run_external_tools():
-    print "running needed external tools...", external_tools
-    for tool in external_tools:
-        subprocess.call(tool)
+
+def run_external_tool():
+    print "running needed external tools...", conf.get('main', 'external_tool')
+    subprocess.call(conf.get('main', 'external_tool').split(' '))
     print "running needed external tools...Ok"
-    
+
 def _remount_boot_for_write():
-    if not TEST_RUN:
-        subprocess.call(["umount", "/boot"])
-        subprocess.call(["mount", BOOT_PARTITION, "/boot"])
-    
+    if conf.getboolean('main', 'remount_boot'):
+        subprocess.call(["umount", conf.get('main', 'boot_path')])
+        subprocess.call(["mount", conf.get('main', 'boot_partition'), conf.get('main', 'boot_path')])
+
 def _remount_boot_for_read():
-    if not TEST_RUN:
-        subprocess.call(["umount", "/boot"])
-        subprocess.call(["mount", "/boot"])  
+    if conf.getboolean('main', 'remount_boot'):
+        subprocess.call(["umount", conf.get('main', 'boot_path')])
+        subprocess.call(["mount", conf.get('main', 'boot_path')])
 
 if __name__ == '__main__':
-    main()          
+    main()
