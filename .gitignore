@@ -8,3 +8,4 @@ dist
 MANIFEST*
 build
 build_kernel.egg-info
+.settings
