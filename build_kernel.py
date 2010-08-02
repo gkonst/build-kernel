@@ -12,6 +12,7 @@ DEFAULT_CONF="/etc/build_kernel.conf"
 conf = None
 
 def load_conf(conf_path=DEFAULT_CONF):
+    global conf
     conf = RawConfigParser()
     conf.read(conf_path)
     return conf
