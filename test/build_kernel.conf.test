@@ -1,4 +1,5 @@
 [main]
+arch=i386
 src_linux=/usr/src/linux
 boot_path=test/boot
 mbr_hdd=/dev/sda

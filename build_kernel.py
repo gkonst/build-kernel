@@ -88,7 +88,7 @@ def compile_kernel(linux_config_path=None):
 def install_kernel(kernel_version):
     print "installing kernel...", kernel_version
     _remount_boot_for_write()
-    copyfile(os.path.join(conf.get('main', 'src_linux'), "arch/i386/boot/bzImage"), get_kernel_path(kernel_version))
+    copyfile(os.path.join(conf.get('main', 'src_linux'), 'arch', conf.get('main', 'arch'), 'boot/bzImage'), get_kernel_path(kernel_version))
     copyfile(os.path.join(conf.get('main', 'src_linux'), "System.map"), os.path.join(conf.get('main', 'boot_path'), 'System.map-%s' % kernel_version))
     _remount_boot_for_read()
     print "installing kernel...Ok"

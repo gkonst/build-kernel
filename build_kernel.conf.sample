@@ -1,4 +1,5 @@
 [main]
+arch=i386
 src_linux=/usr/src/linux
 boot_path=/boot
 mbr_hdd=/dev/sda
@@ -9,5 +10,4 @@ boot_params=
 grub_conf=/boot/grub/grub.conf
 remount_boot=false
 max_kernels=5
-remount_boot=False
 external_tool=/usr/bin/emerge -v1 app-emulation/virtualbox-modules
