@@ -53,7 +53,8 @@ def process(conf, force_version=None):
 
 def parse_cli_options():
     parser = OptionParser()
-    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF, help="Path to build_kernel.conf file (default:%s)" % DEFAULT_CONF, metavar="FILE")
+    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF_PATH, 
+        help="Path to build_kernel.conf file (default:%s)" % DEFAULT_CONF_PATH, metavar="FILE")
     parser.add_option("-v", "--force-version", dest="force_version", help="Force to use given version")
     options, dummy = parser.parse_args()
     return options
