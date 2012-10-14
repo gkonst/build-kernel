@@ -7,7 +7,7 @@ from shutil import copyfile
 from optparse import OptionParser
 from ConfigParser import RawConfigParser
 
-DEFAULT_CONF="/etc/build_kernel.conf"
+DEFAULT_CONF = "/etc/build_kernel.conf"
 
 conf = None
 
@@ -17,12 +17,9 @@ def load_conf(conf_path=DEFAULT_CONF):
     conf.read(conf_path)
     return conf
 
-def main() :
-    check_user()
-    parser = OptionParser()
-    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF, help="Path to build_kernel.conf file (default:%s)" % DEFAULT_CONF, metavar="FILE")
-    parser.add_option("-C", "--config", dest="linux_config_path", default=None, help="Path to .config file", metavar="FILE")
-    (options, args) = parser.parse_args()
+def main():
+    exit_if_user_is_not_root()
+    options = parse_cli_options()
     conf_path = os.path.abspath(options.conf_path)
     if not os.path.isfile(conf_path):
         print "ERROR: wrong build_kernel.conf file : ", conf_path
@@ -37,15 +34,21 @@ def main() :
         print " kernel not found in grub.conf -> adding"
         removed_kernels = add_to_grub_conf(grub_conf, get_kernel_version())
         save_grub_conf(grub_conf, conf)
-        _update_grub()
         remove_old_kernels(prepare_remove_kernels(removed_kernels))
     else:
         print " kernel found in grub.conf"
     run_external_tool()
 
-def check_user():
+def parse_cli_options():
+    parser = OptionParser()
+    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF, help="Path to build_kernel.conf file (default:%s)" % DEFAULT_CONF, metavar="FILE")
+    parser.add_option("-C", "--config", dest="linux_config_path", default=None, help="Path to .config file", metavar="FILE")
+    options, dummy = parser.parse_args()
+    return options
+
+def exit_if_user_is_not_root():
     if os.geteuid() != 0:
-        print "You must be root to run this script."
+        print >> sys.stderr, "You must be root to run this script."
         sys.exit(1)
 
 def get_kernel_version():
@@ -57,7 +60,7 @@ def get_kernel_path(kernel_version):
     else:
         return os.path.join(conf.get('main', 'boot_path'), 'kernel')
 
-def get_system__map_path(image):
+def get_system_map_path(image):
     temp = image.rpartition(os.sep)[2].rpartition("kernel-")
     if temp[1]:
         system_map = os.path.join(conf.get('main', 'boot_path'), 'System.map-%s' % temp[2])
@@ -80,8 +83,7 @@ def compile_kernel(linux_config_path=None):
         linux_config = os.path.join(conf.get('main', 'src_linux'), '.config')
         backup_file(linux_config)
         copyfile(linux_config_path, linux_config)
-#    os.chdir(conf.get('main', 'src_linux'))
-    subprocess.call(["make",], cwd=conf.get('main', 'src_linux'))
+    subprocess.call(["make", ], cwd=conf.get('main', 'src_linux'))
     subprocess.call(["make", "modules_install"], cwd=conf.get('main', 'src_linux'))
     print "compiling kernel...Ok"
 
@@ -122,7 +124,7 @@ def load_grub_conf():
     print "loading grub.conf...Ok (%s kernels found)" % len(result["boot"])
     return result
 
-def save_grub_conf(grub_conf,conf=conf):
+def save_grub_conf(grub_conf, conf=conf):
     print " saving grub.conf...", conf.get('main', 'grub_conf')
     _remount_boot_for_write()
     print "  backuping grub.conf..."
@@ -141,17 +143,10 @@ def save_grub_conf(grub_conf,conf=conf):
     _remount_boot_for_read()
     print " saving grub.conf...Ok"
 
-def _update_grub():
-    print "updating grub..."
-    _remount_boot_for_write()
-    subprocess.call(["grub-install", "--no-floppy", conf.get('main', 'mbr_hdd')])
-    _remount_boot_for_read()
-    print "updating grub...Ok"
-
 def add_to_grub_conf(grub_conf, kernel_version):
     print "adding to grub.conf kernel...", kernel_version
     kernel_string = 'kernel %s root=%s %s' % (get_kernel_path(kernel_version), conf.get('main', 'root_partition'), conf.get('main', 'boot_params'))
-    grub_conf["boot"].insert(0, ["title=%s" % kernel_version,  "root (%s)" % conf.get('main', 'boot_partition_grub'), kernel_string])
+    grub_conf["boot"].insert(0, ["title=%s" % kernel_version, "root (%s)" % conf.get('main', 'boot_partition_grub'), kernel_string])
     removed_kernels = []
 
     gentoo_count = 0
@@ -164,12 +159,12 @@ def add_to_grub_conf(grub_conf, kernel_version):
             if gentoo_count > conf.getint('main', 'max_kernels'):
                 print "   removing old kernel from list : ", removed_kernel
                 del grub_conf["boot"][i]
-                j = j -1
-                i = i -1
+                j = j - 1
+                i = i - 1
                 removed_kernels.append(removed_kernel)
         else:
             print '   skipping : ', removed_kernel
-        i = i +1
+        i = i + 1
     print "adding to grub.conf kernel...Ok (%s old kernel removed)" % len(removed_kernels)
     return removed_kernels
 
@@ -182,7 +177,7 @@ def prepare_remove_kernels(removed_kernels):
                 kernel_version = line.partition("=")[2]
             if line.startswith("kernel") and kernel_version:
                 image = line.split(" ")[1]
-                system_map = get_system__map_path(image)
+                system_map = get_system_map_path(image)
                 result.append((image, system_map))
     return result
 

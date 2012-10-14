@@ -22,7 +22,6 @@ class Test(unittest.TestCase):
 
     def test_load_config(self):
         conf = build_kernel.conf
-        print 'conf : ', conf.items('main')
         self.assertTrue(conf is not None)
         self.assertEqual(conf.get('main', 'src_linux'), '/usr/src/linux')
 
@@ -33,9 +32,9 @@ class Test(unittest.TestCase):
     def test_install_kernel(self):
         build_kernel.install_kernel(TEST_VERSION)
         self.assertTrue(os.path.exists(build_kernel.get_kernel_path(TEST_VERSION)))
-        self.assertTrue(os.path.exists(build_kernel.get_system__map_path(build_kernel.get_kernel_path(TEST_VERSION))))
+        self.assertTrue(os.path.exists(build_kernel.get_system_map_path(build_kernel.get_kernel_path(TEST_VERSION))))
         os.remove(build_kernel.get_kernel_path(TEST_VERSION))
-        os.remove(build_kernel.get_system__map_path(build_kernel.get_kernel_path(TEST_VERSION)))
+        os.remove(build_kernel.get_system_map_path(build_kernel.get_kernel_path(TEST_VERSION)))
 
     def test_load_grub_conf(self):
         grub_conf = build_kernel.load_grub_conf()
@@ -110,14 +109,14 @@ class Test(unittest.TestCase):
         sys.argv.append(TEST_CONF)
         def stub(*args):
             pass
-        build_kernel.check_user = stub
+        build_kernel.exit_if_user_is_not_root = stub
         build_kernel.compile_kernel = stub
         build_kernel._update_grub = stub
         build_kernel.run_external_tool = stub
         def _test():
             build_kernel.main()
             image = build_kernel.get_kernel_path(build_kernel.get_kernel_version())
-            system_map = build_kernel.get_system__map_path(image)
+            system_map = build_kernel.get_system_map_path(image)
             self.assertTrue(os.path.exists(image), 'File not found %s' % image)
             self.assertTrue(os.path.exists(system_map), 'File not found %s' % system_map)
             os.remove(image)
@@ -126,7 +125,7 @@ class Test(unittest.TestCase):
             self.assertFalse(os.path.exists(system_map))
         build_kernel.backup_file(build_kernel.conf.get('main', 'grub_conf'),'~~')
         build_kernel.backup_file(build_kernel.get_kernel_path(None))
-        build_kernel.backup_file(build_kernel.get_system__map_path(build_kernel.get_kernel_path(None)))
+        build_kernel.backup_file(build_kernel.get_system_map_path(build_kernel.get_kernel_path(None)))
         _test()
         # hack kernel version
         version = get_unique_version(TEST_GENTOO_VERSION)
@@ -137,9 +136,9 @@ class Test(unittest.TestCase):
         _test()
         build_kernel.restore_file(build_kernel.conf.get('main', 'grub_conf'),'~~')
         build_kernel.restore_file(build_kernel.get_kernel_path(None))
-        build_kernel.restore_file(build_kernel.get_system__map_path(build_kernel.get_kernel_path(None)))
+        build_kernel.restore_file(build_kernel.get_system_map_path(build_kernel.get_kernel_path(None)))
         os.remove(build_kernel.get_kernel_path(None) + '~')
-        os.remove(build_kernel.get_system__map_path(build_kernel.get_kernel_path(None)) + '~')
+        os.remove(build_kernel.get_system_map_path(build_kernel.get_kernel_path(None)) + '~')
         os.remove(build_kernel.conf.get('main', 'grub_conf') + '~~')
         os.remove(build_kernel.conf.get('main', 'grub_conf') + '~')
 
