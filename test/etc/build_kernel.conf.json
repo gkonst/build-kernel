@@ -1,0 +1,10 @@
+{
+	"arch" : "amd64",
+	"src_linux" : "test/usr/src/linux",
+	"boot_path" : "test/boot",
+	"boot_partition" : "/dev/sda6",
+	"boot_partition_grub" : "hd0,5",
+	"root_partition" : "/dev/sda8",
+	"grub_conf_path" : "test/boot/grub.conf",
+	"external_tool" : "echo TestOk"
+}
