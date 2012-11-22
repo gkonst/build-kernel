@@ -100,10 +100,10 @@ def compile_kernel(kernel_src_path):
 
 def install_kernel(kernel_version, conf):
     print "installing kernel...", kernel_version
-    _remount_boot_for_write(conf['remount_boot'])
+    _remount_boot_for_write(conf)
     copyfile(join(conf['src_linux'], 'arch', conf['arch'], 'boot/bzImage'), get_kernel_path(conf['boot_path'], kernel_version))
     copyfile(join(conf['src_linux'], 'System.map'), get_system_map_path(conf['boot_path'], kernel_version))
-    _remount_boot_for_read(conf['remount_boot'])
+    _remount_boot_for_read(conf)
     print "installing kernel...Ok"
 
 def load_grub_conf(from_path):
@@ -133,7 +133,7 @@ def is_in_grub_conf(grub_conf, kernel_version):
 
 def save_grub_conf(grub_conf, conf):
     print " saving grub.conf...", conf['grub_conf_path']
-    _remount_boot_for_write(conf['remount_boot'])
+    _remount_boot_for_write(conf)
     print "  backuping grub.conf..."
     backup_file(conf['grub_conf_path'])
     print "  backuping grub.conf...Ok"
@@ -145,7 +145,7 @@ def save_grub_conf(grub_conf, conf):
             for line in el:
                 fout.write(line + "\n")
             fout.write("\n")
-    _remount_boot_for_read(conf['remount_boot'])
+    _remount_boot_for_read(conf)
     print " saving grub.conf...Ok"
 
 def add_to_grub_conf_and_remove_if_needed(grub_conf, kernel_version, conf):
@@ -193,14 +193,14 @@ def remove_old_kernels(removed_kernels, conf):
     for kernel in removed_kernels:
         image = kernel[0]
         system_map = kernel[1]
-        _remount_boot_for_write(conf['remount_boot'])
+        _remount_boot_for_write(conf)
         if os.path.exists(image):
             print " deleting kernel image : ", image
             os.remove(image)
         if os.path.exists(system_map):
             print " deleting kernel map : ", system_map
             os.remove(system_map)
-        _remount_boot_for_read(conf['remount_boot'])
+        _remount_boot_for_read(conf)
     print "removing old kernels from disk...Ok"
 
 def run_external_tool(external_tools):
@@ -208,15 +208,15 @@ def run_external_tool(external_tools):
     subprocess.call(external_tools.split(' '))
     print "running needed external tools...Ok"
 
-def _remount_boot_for_write(remount_boot):
-    if remount_boot:
-        subprocess.call(["umount", conf.get('main', 'boot_path')])
-        subprocess.call(["mount", conf.get('main', 'boot_partition'), conf.get('main', 'boot_path')])
+def _remount_boot_for_write(conf):
+    if conf['remount_boot']:
+        subprocess.call(["umount", conf['boot_path']])
+        subprocess.call(["mount", conf['boot_partition'], conf['boot_path']])
 
-def _remount_boot_for_read(remount_boot):
-    if remount_boot:
-        subprocess.call(["umount", conf.get('main', 'boot_path')])
-        subprocess.call(["mount", conf.get('main', 'boot_path')])
+def _remount_boot_for_read(conf):
+    if conf['remount_boot']:
+        subprocess.call(["umount", conf['boot_path']])
+        subprocess.call(["mount", conf['boot_path']])
 
 def copyfile(src, dst):
     print '  copying from %s to %s' % (src, dst)
