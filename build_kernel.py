@@ -14,7 +14,7 @@ DEFAULT_CONF = {
     'src_linux' : '/usr/src/linux',
     'boot_path' : '/boot',
     'mbr_hdd' : '/dev/sda',
-    'grub_conf_path' : '/boot/grub.conf',
+    'grub_conf_path' : '/boot/grub/grub.conf',
     'remount_boot' : False,
     'max_kernels' : 5, 
     'boot_params' : ''
