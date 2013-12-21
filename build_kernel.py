@@ -10,15 +10,16 @@ from optparse import OptionParser
 
 DEFAULT_CONF_PATH = '/etc/build_kernel.conf'
 DEFAULT_CONF = {
-    'arch' : 'i386',
-    'src_linux' : '/usr/src/linux',
-    'boot_path' : '/boot',
-    'mbr_hdd' : '/dev/sda',
-    'grub_conf_path' : '/boot/grub/grub.conf',
-    'remount_boot' : False,
-    'max_kernels' : 5, 
-    'boot_params' : ''
+    'arch': 'i386',
+    'src_linux': '/usr/src/linux',
+    'boot_path': '/boot',
+    'mbr_hdd': '/dev/sda',
+    'grub_conf_path': '/boot/grub/grub.conf',
+    'remount_boot': False,
+    'max_kernels': 5,
+    'boot_params': ''
 }
+
 
 def load_conf(conf_path=DEFAULT_CONF_PATH):
     conf = DEFAULT_CONF.copy()
@@ -26,9 +27,10 @@ def load_conf(conf_path=DEFAULT_CONF_PATH):
         conf.update(json.load(open(conf_path)))
     return conf
 
+
 def main():
     options = parse_cli_options()
-    exit_if_user_is_not_root()    
+    exit_if_user_is_not_root()
     # TODO remove check for file when it's optional
     conf_path = os.path.abspath(options.conf_path)
     if not os.path.isfile(conf_path):
@@ -37,7 +39,8 @@ def main():
     print "using conf from : ", conf_path
     process(load_conf(conf_path), options.force_version)
 
-def process(conf, force_version=None):    
+
+def process(conf, force_version=None):
     compile_kernel(conf['src_linux'])
     kernel_version = force_version or extract_version_from_src_path(conf['src_linux'])
     install_kernel(kernel_version, conf)
@@ -51,21 +54,25 @@ def process(conf, force_version=None):
         print " kernel found in grub.conf"
     run_external_tool(conf['external_tool'])
 
+
 def parse_cli_options():
     parser = OptionParser()
-    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF_PATH, 
-        help="Path to build_kernel.conf file (default:%s)" % DEFAULT_CONF_PATH, metavar="FILE")
+    parser.add_option("-c", "--conf", dest="conf_path", default=DEFAULT_CONF_PATH,
+                      help="Path to build_kernel.conf file (default:%s)" % DEFAULT_CONF_PATH, metavar="FILE")
     parser.add_option("-v", "--force-version", dest="force_version", help="Force to use given version")
     options, dummy = parser.parse_args()
     return options
+
 
 def exit_if_user_is_not_root():
     if os.geteuid() != 0:
         print >> sys.stderr, "You must be root to run this script."
         sys.exit(1)
 
+
 def extract_version_from_src_path(kernel_src_path):
     return os.path.basename(os.path.realpath(kernel_src_path))
+
 
 def get_kernel_path(boot_path, kernel_version):
     if kernel_version:
@@ -73,23 +80,28 @@ def get_kernel_path(boot_path, kernel_version):
     else:
         return os.path.join(boot_path, 'kernel')
 
-def get_system_map_path(boot_path, kernel_version):    
+
+def get_system_map_path(boot_path, kernel_version):
     if kernel_version:
         return os.path.join(boot_path, 'System.map-%s' % kernel_version)
     else:
         return os.path.join(boot_path, 'System.map')
 
+
 def get_system_map_path_from_kernel(boot_path, kernel):
     return get_system_map_path(boot_path, kernel.rpartition(os.sep)[2].rpartition("kernel-")[2])
+
 
 def backup_file(path, symbol='~'):
     if os.path.exists(path):
         copyfile(path, path + symbol)
 
+
 def restore_file(path, symbol='~'):
     backup = path + symbol
     if os.path.exists(backup):
         copyfile(backup, path)
+
 
 def compile_kernel(kernel_src_path):
     kernel_version = extract_version_from_src_path(kernel_src_path)
@@ -97,6 +109,7 @@ def compile_kernel(kernel_src_path):
     subprocess.call(["make", ], cwd=kernel_src_path)
     subprocess.call(["make", "modules_install"], cwd=kernel_src_path)
     print "compiling kernel...Ok"
+
 
 def install_kernel(kernel_version, conf):
     print "installing kernel...", kernel_version
@@ -106,13 +119,14 @@ def install_kernel(kernel_version, conf):
     _remount_boot_for_read(conf)
     print "installing kernel...Ok"
 
+
 def load_grub_conf(from_path):
     print "loading grub.conf... ", from_path
     boot = None
     boots = []
     params = []
     with open(from_path, "rt") as fin:
-        content = fin.read()    
+        content = fin.read()
         for line in ifilter(lambda line: line, content.split("\n")):
             if "title=" in line:
                 boot = [line]
@@ -121,15 +135,17 @@ def load_grub_conf(from_path):
                 boot.append(line)
             else:
                 params.append(line)
-    result = { "params" : params, "boot" : boots}
+    result = {"params": params, "boot": boots}
     print "loading grub.conf...Ok (%s kernels found)" % len(result["boot"])
     return result
+
 
 def is_in_grub_conf(grub_conf, kernel_version):
     print ' checking for kernel...', kernel_version
     for boot in grub_conf["boot"]:
         if len(filter(lambda line: "title=" in line and line.partition("=")[2].strip() == kernel_version, boot)):
-            return True    
+            return True
+
 
 def save_grub_conf(grub_conf, conf):
     print " saving grub.conf...", conf['grub_conf_path']
@@ -148,32 +164,34 @@ def save_grub_conf(grub_conf, conf):
     _remount_boot_for_read(conf)
     print " saving grub.conf...Ok"
 
+
 def add_to_grub_conf_and_remove_if_needed(grub_conf, kernel_version, conf):
     # TODO split and simplify this method
     print "adding to grub.conf kernel...", kernel_version
-    kernel_string = 'kernel %s root=%s %s' % (get_kernel_path(conf['boot_path'], kernel_version), 
-        conf['root_partition'], conf['boot_params'])
+    kernel_string = 'kernel %s root=%s %s' % (get_kernel_path(conf['boot_path'], kernel_version),
+                                              conf['root_partition'], conf['boot_params'])
     grub_conf["boot"].insert(0, ["title=%s" % kernel_version, "root (%s)" % conf['boot_partition_grub'], kernel_string])
     removed_kernels = []
 
     gentoo_count = 0
     j = len(grub_conf["boot"])
     i = 0
-    while(i < j):
+    while i < j:
         removed_kernel = grub_conf["boot"][i]
         if "gentoo" in removed_kernel[0].lower():
-            gentoo_count = gentoo_count + 1
+            gentoo_count += 1
             if gentoo_count > conf['max_kernels']:
                 print "   removing old kernel from list : ", removed_kernel
                 del grub_conf["boot"][i]
-                j = j - 1
-                i = i - 1
+                j -= 1
+                i -= 1
                 removed_kernels.append(removed_kernel)
         else:
             print '   skipping : ', removed_kernel
-        i = i + 1
+        i += 1
     print "adding to grub.conf kernel...Ok (%s old kernel removed)" % len(removed_kernels)
     return removed_kernels
+
 
 def prepare_remove_kernels(removed_kernels, conf):
     result = []
@@ -182,11 +200,12 @@ def prepare_remove_kernels(removed_kernels, conf):
         for line in kernel:
             if line.startswith("title"):
                 kernel_version = line.partition("=")[2]
-            if line.startswith("kernel") and kernel_version:                
+            if line.startswith("kernel") and kernel_version:
                 image = os.path.join(conf['boot_path'], line.split(" ")[1].partition(os.sep)[2])
                 system_map = get_system_map_path_from_kernel(conf['boot_path'], image)
                 result.append((image, system_map))
     return result
+
 
 def remove_old_kernels(removed_kernels, conf):
     print "removing old kernels from disk..."
@@ -203,24 +222,29 @@ def remove_old_kernels(removed_kernels, conf):
         _remount_boot_for_read(conf)
     print "removing old kernels from disk...Ok"
 
+
 def run_external_tool(external_tools):
     print "running needed external tools...", external_tools
     subprocess.call(external_tools.split(' '))
     print "running needed external tools...Ok"
+
 
 def _remount_boot_for_write(conf):
     if conf['remount_boot']:
         subprocess.call(["umount", conf['boot_path']])
         subprocess.call(["mount", conf['boot_partition'], conf['boot_path']])
 
+
 def _remount_boot_for_read(conf):
     if conf['remount_boot']:
         subprocess.call(["umount", conf['boot_path']])
         subprocess.call(["mount", conf['boot_path']])
 
+
 def copyfile(src, dst):
     print '  copying from %s to %s' % (src, dst)
     return _copyfile(src, dst)
+
 
 if __name__ == '__main__':
     main()
