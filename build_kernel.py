@@ -8,12 +8,11 @@ from itertools import ifilter
 from shutil import copyfile as _copyfile
 from optparse import OptionParser
 
-DEFAULT_CONF_PATH = '/etc/build_kernel.conf'
+DEFAULT_CONF_PATH = '/etc/build_kernel.conf.json'
 DEFAULT_CONF = {
     'arch': 'i386',
     'src_linux': '/usr/src/linux',
     'boot_path': '/boot',
-    'mbr_hdd': '/dev/sda',
     'grub_conf_path': '/boot/grub/grub.conf',
     'remount_boot': False,
     'max_kernels': 5,
@@ -34,7 +33,7 @@ def main():
     # TODO remove check for file when it's optional
     conf_path = os.path.abspath(options.conf_path)
     if not os.path.isfile(conf_path):
-        print >> sys.stderr, "ERROR: wrong build_kernel.conf file : ", conf_path
+        print >> sys.stderr, "ERROR: wrong configuration file : ", conf_path
         sys.exit()
     print "using conf from : ", conf_path
     process(load_conf(conf_path), options.force_version)

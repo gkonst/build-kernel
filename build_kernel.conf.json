@@ -1,0 +1,35 @@
+{
+    // current OS architecture, actually in which directory bzImage will be place after compilation
+    // e.g. for arch=i386 - /usr/src/linux/arch/i386/boot/bzImage
+	"arch" : "x86_64",
+
+    // place for linux kernel source
+	"src_linux" : "/usr/src/linux",
+
+    // place where boot partition is mounted, i.e. where to put kernel binary
+	"boot_path" : "/boot",
+
+    // boot partition, used to mount it in boot_path
+	"boot_partition" : "/dev/sda6",
+
+    // remount boot partition with write access or not
+    "remount_boot" : true,
+
+    // boot partition in grub configuration
+	"boot_partition_grub" : "hd0,5",
+
+    // root partition, used in grub conf
+	"root_partition" : "/dev/sda8",
+
+    // some boot params which need to be added to grub conf, e.g. video=vesafb:ywrap,mtrr:3 vga=0x0318
+    "boot_params" : "",
+
+    // grub configuration path
+	"grub_conf_path" : "/boot/grub/grub.conf",
+
+    // maximum number of kernels which should be kept in grub conf
+    "max_kernels" : 5,
+
+    // command to run after kernel installation, used to rebuild some modules
+	"external_tool" : "/usr/sbin/module-rebuild rebuild"
+}
